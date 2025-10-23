@@ -74,16 +74,17 @@ class CameraTracker:
                             print(f'[0] POS:{x:.1f},{y:.1f} HDG:{hdg:.1f} FRM:{last_count}')
                             with self.pose_lock:
                                 self.latest_pose = [x,y,hdg]
-            time.sleep(0.5)
+            time.sleep(0.1)
         print('Locate thread ending')
 
 
     def calc_pose(self,corners):
         x0,y0 = corners[0]
+        x2,y2 = corners[2]
         x3,y3 = corners[3]
         heading = 90. - math.degrees(math.atan2(-(y0-y3),x0-x3))
-        x_avg = (x0 + x3)/2.
-        y_avg = (y0 + y3)/2.
+        x_avg = (x0 + x2)/2.
+        y_avg = (y0 + y2)/2.
         return x_avg, y_avg, heading
 
 
@@ -101,6 +102,20 @@ class CameraTracker:
         self.locate_thread.join()
 
 
+    def latest(self):
+        ret_img = None
+        ret_pose = None
+        if self.latest_frame is not None:
+            with self.frame_lock:
+                ret_img =  self.latest_frame.copy()
+        
+        if self.latest_pose is not None:
+            with self.pose_lock:
+                ret_pose = self.latest_pose.copy()
+        return ret_img, ret_pose
+        
+    
+
 if __name__ == '__main__':
     tracker = CameraTracker()
     tracker.start()
@@ -112,5 +127,5 @@ if __name__ == '__main__':
         pass
     except Exception as e:
         print(e)
-        
+
     tracker.stop()

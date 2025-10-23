@@ -1,45 +1,44 @@
-import numpy as np
-import serial
-from threading import Thread
 import tkinter as tk
-import time
+from PIL import Image, ImageTk
 
-MULT = 2.5
+from camera_tracker import CameraTracker
 
 class GCS(tk.Tk):
     def __init__(self, *args, **kwargs):
         
         # Init Tk
         tk.Tk.__init__(self, *args, **kwargs)
-        self.wm_title("Laser Bot GCS")
-        self.canvas = tk.Canvas(self, bg='black', height=MULT*400, width=MULT*400)
+        self.wm_title("AMSL GCS")
+        self.canvas = tk.Canvas(self, height=432, width=1536)
         self.canvas.pack()
 
-        # Handle SiK Radio
-        self.sik_port = serial.Serial('/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_D30GKCRB-if00-port0',57600,timeout=None)
-        self.sik_thread = Thread(target=self.read_sik, daemon=True)
-        self.sik_thread.start()
+        self.tracker = CameraTracker()
+        self.tracker.start()
 
-        # State
-        self.ranges = np.zeros(720,dtype=np.uint8)
+        self.update()
+
+        self.frame_tk = None
+        self.canvas_image = None
+        self.canvas_marker = None
 
 
-    def read_sik(self):
-        while True:
-            pkt = self.sik_port.read_until(b'\xFF',1024)
-            if len(pkt) > 1:
-                timestamp =pkt[:15]
-                self.ranges = np.frombuffer(pkt[15:-1],dtype=np.uint8)
-                if self.ranges.shape[0] == 720:
-                    self.canvas.delete('all')
-                    self.canvas.create_oval(MULT*200-MULT*100,MULT*200-MULT*100,MULT*200+MULT*100,MULT*200+MULT*100,fill='black',outline='blue')
-                    self.canvas.create_oval(MULT*200-MULT*50,MULT*200-MULT*50,MULT*200+MULT*50,MULT*200+MULT*50,fill='black',outline='blue')
-                    self.canvas.create_oval(MULT*200-MULT*10 ,MULT*200-MULT*10 ,MULT*200+MULT*10 ,MULT*200+MULT*10 ,fill='black',outline='green')
-                    self.canvas.create_line(MULT*200,MULT*200,MULT*200,MULT*200-MULT*10,fill='green')
-                    for i in range(720):
-                        dy = MULT*200 + -MULT*self.ranges[i] * np.cos(np.radians(i/2))
-                        dx = MULT*200 + MULT*self.ranges[i] * np.sin(np.radians(i/2))
-                        self.canvas.create_oval(dx-1,dy-1,dx+1,dy+1,fill='red',outline='black')
+
+    def update(self):
+        img,pose = self.tracker.latest()
+        
+        if img is not None:
+            self.frame_tk = ImageTk.PhotoImage(image=Image.fromarray(img))
+            if self.canvas_image is None:
+                self.canvas_image = self.canvas.create_image(0,0,anchor='nw',image=self.frame_tk)
+            else:
+                self.canvas.itemconfig(self.canvas_image,image=self.frame_tk)
+        if pose is not None:
+            if self.canvas_marker is None:
+                self.canvas_marker = self.canvas.create_oval(pose[0]-5,pose[1]-5,pose[0]+5,pose[1]+5,fill='blue',outline='blue')
+            else:
+                self.canvas.coords(self.canvas_marker,pose[0]-5,pose[1]-5,pose[0]+5,pose[1]+5)
+        self.after(50,self.update)
+
 
 if __name__ == '__main__':
     gcs = GCS()
